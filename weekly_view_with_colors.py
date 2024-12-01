@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox, simpledialog
+from tkinter import messagebox, simpledialog, ttk
 import sqlite3
 
 # Create SQLite database connection
@@ -113,38 +113,50 @@ def create_task_button(task_title, task_id=None, day=None):
     task_buttons[day][task_title] = task_button  # Track the button in the global dictionary
 
 # Handle task submission
-def add_task(day):
+def add_task():
+    # Prompt user to select the day
+    day = day_selector.get()  # Get the selected day from the dropdown menu
+    
+    if not day:
+        messagebox.showwarning("No Day Selected", "Please select a day of the week.")
+        return
+    
+    # Ask for the task title
     task_title = simpledialog.askstring("Create Task", f"Enter task title for {day}:")
     if not task_title:
         return
+    
+    # Save task to the database
     save_task_to_db(task_title, "", day)
+    
+    # Retrieve the task ID from the database
     cursor = db_connection.cursor()
-    cursor.execute("SELECT id FROM tasks WHERE title = ?", (task_title,))
+    cursor.execute("SELECT id FROM tasks WHERE title = ? AND day = ?", (task_title, day))
     new_task_id = cursor.fetchone()
     if new_task_id:
-        create_task_button(task_title, new_task_id[0], day)  # Create the button within the appropriate frame
+        create_task_button(task_title, new_task_id[0], day)  # Create the button for this task
 
 # Initialize the main weekly view
 def initialize_weekly_view():
-    global window, day_frames, task_buttons
+    global window, day_frames, task_buttons, day_selector
     window = tk.Tk()
     window.title("Weekly Task Manager")
     window.geometry("900x600")
 
-    # Frames for each day of the week
-    days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    # Frames for each day of the week (move Sunday to the beginning)
+    days_of_week = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
     day_frames = {}
     task_buttons = {day: {} for day in days_of_week}
 
-    # Colors for each day of the week
+    # Colors for each day of the week, with Sunday starting as red
     day_colors = {
-        "Monday": "#F94144",
-        "Tuesday": "#F3722C",
-        "Wednesday": "#F8961E",
-        "Thursday": "#F9C74F",
-        "Friday": "#90BE6D",
-        "Saturday": "#43AA8B",
-        "Sunday": "#577590"
+        "Sunday": "#F94144",  # Red
+        "Monday": "#F3722C",  # Orange
+        "Tuesday": "#F8961E",  # Yellow
+        "Wednesday": "#F9C74F",  # Light Yellow
+        "Thursday": "#90BE6D",  # Green
+        "Friday": "#43AA8B",  # Teal
+        "Saturday": "#577590"  # Blue
     }
 
     for i, day in enumerate(days_of_week):
@@ -158,13 +170,19 @@ def initialize_weekly_view():
         # Label for the day
         tk.Label(frame, text=day, font=("Helvetica", 14, "bold"), bg=day_colors[day]).pack()
 
-        # Button to add tasks
-        tk.Button(frame, text="Add Task", command=lambda d=day: add_task(d)).pack(pady=5)
-
         # Load existing tasks for the day
         tasks = load_tasks_for_day(day)
         for task_id, task_title in tasks:
             create_task_button(task_title, task_id, day)
+
+    # Create a dropdown (OptionMenu) to select the day for the task
+    day_selector = ttk.Combobox(window, values=days_of_week, state="readonly", width=20)
+    day_selector.set("Sunday")  # Default value set to Sunday
+    day_selector.grid(row=1, column=0, columnspan=7, pady=10)  # Place it at the bottom of the window
+
+    # Add Task button
+    add_task_button = tk.Button(window, text="Create Task", command=add_task, width=20)
+    add_task_button.grid(row=2, column=0, columnspan=7, pady=5)  # Place it below the dropdown
 
     # Ensure columns and rows resize proportionally
     for i in range(7):
