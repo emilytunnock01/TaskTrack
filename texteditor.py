@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 import sqlite3
 
-########################################################
+##########################  UI  ###################################################################################
 def center_window(window, width, height):
     # Get the screen dimensions
     screen_width = window.winfo_screenwidth()
@@ -14,8 +14,8 @@ def center_window(window, width, height):
     
     # Set the geometry of the window
     window.geometry(f"{width}x{height}+{x}+{y}")
-######################################################
 
+################################## DATABASE FUNCTIONS ###########################################################
 # Create SQLite database connection
 def initialize_database():
     conn = sqlite3.connect("tasks.db")
@@ -26,7 +26,8 @@ def initialize_database():
             id INTEGER PRIMARY KEY,
             title TEXT NOT NULL,
             content TEXT,
-            day TEXT NOT NULL
+            day TEXT NOT NULL,
+            status TEXT NOT NULL
         )
     ''')
     conn.commit()
@@ -42,6 +43,14 @@ def ensure_schema():
 
 db_connection = initialize_database()
 ensure_schema()
+
+#CLEARING
+def clear_database():
+    cursor = db_connection.cursor()
+    cursor.execute("DELETE FROM tasks")  # Deletes all rows from the 'tasks' table
+    db_connection.commit()
+    messagebox.showinfo("Database Cleared", "All tasks have been removed!")
+
 
 # Save task content to the database
 def save_task_to_db(task_title, task_content, day):
@@ -68,14 +77,51 @@ def change_task_day(task_id, new_day):
     db_connection.commit()
     messagebox.showinfo("Task Updated", f"Task has been moved to {new_day}.")
 
+#move task to completed
+def completed_task(task_id, task_title, task_day):
+    # Mark the task as completed in the database
+    cursor = db_connection.cursor()
+    cursor.execute("UPDATE tasks SET status = 'completed' WHERE id = ?", (task_id,))
+    db_connection.commit()
+
+    # Remove the task button from the weekly view
+    if task_title in task_buttons[task_day]:
+        task_buttons[task_day][task_title].destroy()  # Destroy the button
+        del task_buttons[task_day][task_title]  # Remove from the dictionary
+
+    messagebox.showinfo("Task Marked as Completed", f"Task '{task_title}' has been marked as completed!")
+
 # Load all tasks for a specific day from the database
 def load_tasks_for_day(day):
     cursor = db_connection.cursor()
-    cursor.execute("SELECT id, title FROM tasks WHERE day = ?", (day,))
+    cursor.execute("SELECT id, title FROM tasks WHERE day = ? AND status != 'completed'", (day,))
     return cursor.fetchall()
 
+#fetch all completed task
+def load_completed_tasks():
+    cursor = db_connection.cursor()
+    cursor.execute("SELECT id, title, content, day FROM tasks WHERE status = 'completed'")
+    return cursor.fetchall()
+
+
+def refresh_weekly_view():
+    # Clear the task buttons for each day
+    for day in day_frames:
+        for task_button in task_buttons[day].values():
+            task_button.destroy()
+        task_buttons[day].clear()
+
+    # Load tasks again for each day
+    for day in day_frames:
+        tasks = load_tasks_for_day(day)
+        for task_id, task_title in tasks:
+            create_task_button(task_title, task_id, day)
+
+
+
+####################### TEXT EDITOR WINDOW #######################################################################
 # Open text editor window for a task
-def open_text_editor(task_title, task_id=None, day=None):
+def open_text_editor(task_title, task_id=None, day=None, status="not-complete"):
     editor_window = tk.Toplevel()
     editor_window.title(f"Text Editor - {task_title}")
     editor_window.geometry("400x300")
@@ -112,45 +158,60 @@ def open_text_editor(task_title, task_id=None, day=None):
             messagebox.showinfo("Deleted", f"Task '{task_title}' deleted!")
             editor_window.destroy()
 
-    def edit_content(task_id, task_title, current_day):
+    def edit_content(task_id, task_title, current_day, status):
         # Create a new popup window
         edit_window = tk.Toplevel()
-        edit_window.title(f"Move Task - {task_title}")
-        edit_window.geometry("300x150")
-
-        # Label for the dropdown
-        tk.Label(edit_window, text="Select new day:", font=("Helvetica", 12)).pack(pady=10)
+        edit_window.title(f"Edit Task - {task_title}")
+        edit_window.geometry("300x200")
 
         # Dropdown for selecting the new day
+        tk.Label(edit_window, text="Select new day:", font=("Helvetica", 12)).pack(pady=5)
         days_of_week = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-        day_var = tk.StringVar(value=current_day)  # Pre-select current day
+        day_var = tk.StringVar(value=current_day)
         day_selector = ttk.Combobox(edit_window, textvariable=day_var, values=days_of_week, state="readonly")
-        day_selector.pack(pady=10)
+        day_selector.pack(pady=5)
 
-        # Function to move the task
-        def move_task():
+        # Checkbox for marking as completed
+        completed_var = tk.BooleanVar(value=(status == "completed"))
+        tk.Checkbutton(edit_window, text="Mark as Completed", variable=completed_var).pack(pady=5)
+
+        # Function to save edits
+        def save_edits():
             new_day = day_var.get()
-            if new_day == current_day:
-                messagebox.showinfo("No Change", "Task is already assigned to this day.")
-                return
+            completed = "completed" if completed_var.get() else "not-complete"
 
-            # Update the database
-            change_task_day(task_id, new_day)
+            # Check if the new day is different from the current day
+            if new_day != current_day:
+                # Update the task's day in the database if the day has changed
+                change_task_day(task_id, new_day)
+                
+                # Update UI for the new day (remove from old day and add to new day)
+                if task_title in task_buttons[current_day]:
+                    task_buttons[current_day][task_title].destroy()
+                    del task_buttons[current_day][task_title]
+                
+                create_task_button(task_title, task_id, new_day)
 
-            # Update the UI
-            if task_title in task_buttons[current_day]:  # Check if the task button exists
-                task_buttons[current_day][task_title].destroy()  # Remove the button from the current day frame
-                del task_buttons[current_day][task_title]
 
-            # Recreate the button in the new day's frame
-            create_task_button(task_title, task_id, new_day)
 
-            messagebox.showinfo("Task Moved", f"Task '{task_title}' has been moved to {new_day}.")
-            edit_window.destroy()  # Close the edit window
+            # Update the status (whether completed or not)
+            cursor = db_connection.cursor()
+            cursor.execute("UPDATE tasks SET status = ? WHERE id = ?", (completed, task_id))
+            db_connection.commit()
 
-        # Submit button
-        tk.Button(edit_window, text="Move Task", command=move_task).pack(pady=10)
+            messagebox.showinfo("Task Updated", f"Task '{task_title}' updated!")
+            edit_window.destroy()
+
+        tk.Button(edit_window, text="Save Changes", command=save_edits).pack(pady=10)
+
+
+
+            
+            
         
+            
+
+
 
     button_save = tk.Button(frame, text="Save", command=save_content)
     button_save.pack(side="left", padx=5, pady=5)
@@ -159,8 +220,10 @@ def open_text_editor(task_title, task_id=None, day=None):
     button_delete.pack(side="left", padx=5, pady=5)
 
     button_edit = tk.Button(frame, text="Edit", 
-                             command=lambda: edit_content(task_id, task_title, day))
+                             command=lambda: edit_content(task_id, task_title, day, status))
     button_edit.pack(side="left", padx=5, pady=5)
+
+
 
     # Pre-fill with existing content if editing
     if task_id is not None:
@@ -170,10 +233,11 @@ def open_text_editor(task_title, task_id=None, day=None):
         if content and content[0]:
             text_edit.insert("1.0", content[0])
 
+############################### TASK CREATION ###################################################################
 # Create a task button
-def create_task_button(task_title, task_id=None, day=None):
+def create_task_button(task_title, task_id=None, day=None, status="not-completed"):
     task_button = tk.Button(day_frames[day], text=task_title, width=20,
-                            command=lambda: open_text_editor(task_title, task_id, day))
+                            command=lambda: open_text_editor(task_title, task_id, day, status))
     task_button.pack(pady=5)
     task_buttons[day][task_title] = task_button  # Track the button in the global dictionary
 
@@ -208,7 +272,7 @@ def add_task():
             return
         
         # Save the task to the database
-        save_task_to_db(task_title, "", day)
+        save_task_to_db(task_title, "", day,)
         
         # Retrieve the task ID from the database
         cursor = db_connection.cursor()
@@ -224,7 +288,44 @@ def add_task():
     # Submit Button
     tk.Button(task_window, text="Create Task", command=submit_task).pack(pady=15)
 
-# Initialize the main weekly view
+def completed_task_menu():
+    completed_tasks = load_completed_tasks()
+
+    # Create a new popup window to display completed tasks
+    completed_window = tk.Toplevel()
+    completed_window.title("Completed Tasks")
+    completed_window.geometry("400x300")
+
+    # Create a scrollbar and a frame to hold the tasks
+    scroll_frame = tk.Frame(completed_window)
+    scroll_frame.pack(expand=True, fill="both")
+
+    canvas = tk.Canvas(scroll_frame)
+    canvas.pack(side="left", fill="both", expand=True)
+
+    scrollbar = tk.Scrollbar(scroll_frame, orient="vertical", command=canvas.yview)
+    scrollbar.pack(side="right", fill="y")
+
+    canvas.configure(yscrollcommand=scrollbar.set)
+    task_frame = tk.Frame(canvas)
+    canvas.create_window((0, 0), window=task_frame, anchor="nw")
+
+    # Add each completed task as a button
+    for task in completed_tasks:
+        task_id, task_title, task_content, task_day = task
+
+        # Create a button for each completed task
+        task_button = tk.Button(task_frame, text=f"{task_title} - {task_day}",
+                                command=lambda task_id=task_id, task_title=task_title, task_day=task_day: open_text_editor(task_title, task_id, task_day, "completed"))
+        task_button.pack(fill="x", padx=10, pady=5)
+
+    # Update scrollable region
+    task_frame.update_idletasks()
+    canvas.config(scrollregion=canvas.bbox("all"))
+
+
+
+################################# MAIN MENU ##################################################################################
 def initialize_weekly_view():
     global window, day_frames, task_buttons
     window = tk.Tk()
@@ -290,9 +391,19 @@ def initialize_weekly_view():
         for task_id, task_title in tasks:
             create_task_button(task_title, task_id, day)
 
+
+
+
     # Create the "Create Task" button at the bottom
     add_task_button = tk.Button(window, text="Create Task", command=add_task, width=20)
     add_task_button.grid(row=2, column=0, columnspan=7, pady=10)
+
+    ##clear_button = tk.Button(window, text="Clear All Tasks", command=clear_database)
+    ##clear_button.grid(row=3, column=0, columnspan=7, pady=10)
+
+    completed_button = tk.Button(window, text="Completed Tasks", command=completed_task_menu)
+    completed_button.grid(row=3, column=0, columnspan=7, pady=10)
+
 
     # Ensure columns resize proportionally
     for i in range(7):
@@ -301,6 +412,11 @@ def initialize_weekly_view():
 
     window.mainloop()
 
+
+
+
+
+############################# START'ER UP #########################################################################3
 # Initialize database and start program
 db_connection = initialize_database()
 initialize_weekly_view()
