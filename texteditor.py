@@ -2,6 +2,20 @@ import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 import sqlite3
 
+########################################################
+def center_window(window, width, height):
+    # Get the screen dimensions
+    screen_width = window.winfo_screenwidth()
+    screen_height = window.winfo_screenheight()
+    
+    # Calculate the position
+    x = (screen_width - width) // 2
+    y = (screen_height - height) // 2
+    
+    # Set the geometry of the window
+    window.geometry(f"{width}x{height}+{x}+{y}")
+######################################################
+
 # Create SQLite database connection
 def initialize_database():
     conn = sqlite3.connect("tasks.db")
@@ -138,9 +152,6 @@ def open_text_editor(task_title, task_id=None, day=None):
         tk.Button(edit_window, text="Move Task", command=move_task).pack(pady=10)
         
 
-
-            
-
     button_save = tk.Button(frame, text="Save", command=save_content)
     button_save.pack(side="left", padx=5, pady=5)
 
@@ -215,17 +226,44 @@ def add_task():
 
 # Initialize the main weekly view
 def initialize_weekly_view():
-    global window, day_frames, task_buttons, day_selector
+    global window, day_frames, task_buttons
     window = tk.Tk()
-    window.title("Weekly Task Manager")
-    window.geometry("900x600")
+    window.title("TaskTrack")
+    center_window(window, 1000, 900)  # Center the main window
 
-    # Frames for each day of the week (move Sunday to the beginning)
+    # Header frame for the title and subtitle
+    header_frame = tk.Frame(window, bg="#4C9EEB", pady=10)  # Add padding for better spacing
+    header_frame.grid(row=0, column=0, columnspan=7, sticky="nsew")  # Span all columns
+
+    # Title label
+    title_label = tk.Label(
+        header_frame,
+        text="Welcome to TaskTrack!",
+        font=("League Spartan", 25, "bold"),
+        bg="#4C9EEB",
+        fg="white"
+    )
+    title_label.pack()
+
+    # Subtitle label
+    subtitle_label = tk.Label(
+        header_frame,
+        text="FastTrack with TaskTrack and manage all your tasks with ease.",
+        font=("League Spartan", 15, "italic"),
+        bg="#4C9EEB",
+        fg="white"
+    )
+    subtitle_label.pack()
+
+    # Ensure header row resizes proportionally
+    window.grid_rowconfigure(0, weight=0)
+
+    # Frames for each day of the week
     days_of_week = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
     day_frames = {}
     task_buttons = {day: {} for day in days_of_week}
 
-    # Colors for each day of the week, with Sunday starting as red
+    # Colors for each day of the week
     day_colors = {
         "Sunday": "#F94144",  # Red
         "Monday": "#F3722C",  # Orange
@@ -238,30 +276,28 @@ def initialize_weekly_view():
 
     for i, day in enumerate(days_of_week):
         frame = tk.Frame(window, borderwidth=2, relief="groove", padx=10, pady=10)
-        frame.grid(row=0, column=i, sticky="nsew", padx=5, pady=5)  # Grid for proportional sizing
+        frame.grid(row=1, column=i, sticky="nsew", padx=5, pady=5)  # Adjust row index to 1
         day_frames[day] = frame
 
         # Set background color for each day
         frame.configure(bg=day_colors[day])
 
         # Label for the day
-        tk.Label(frame, text=day, font=("Helvetica", 14, "bold"), bg=day_colors[day]).pack()
+        tk.Label(frame, text=day, font=("League Spartan", 15, "bold"), bg=day_colors[day]).pack()
 
         # Load existing tasks for the day
         tasks = load_tasks_for_day(day)
         for task_id, task_title in tasks:
             create_task_button(task_title, task_id, day)
 
-    
-
-    # Add Task button
+    # Create the "Create Task" button at the bottom
     add_task_button = tk.Button(window, text="Create Task", command=add_task, width=20)
-    add_task_button.grid(row=2, column=0, columnspan=7, pady=5)  # Place it below the dropdown
+    add_task_button.grid(row=2, column=0, columnspan=7, pady=10)
 
-    # Ensure columns and rows resize proportionally
+    # Ensure columns resize proportionally
     for i in range(7):
-        window.grid_columnconfigure(i, weight=1, uniform="equal")  # Equal weight for columns
-    window.grid_rowconfigure(0, weight=1)  # Ensure row stretches to fill vertical space
+        window.grid_columnconfigure(i, weight=1, uniform="equal")
+    window.grid_rowconfigure(1, weight=1)  # Make day frames stretchable
 
     window.mainloop()
 
