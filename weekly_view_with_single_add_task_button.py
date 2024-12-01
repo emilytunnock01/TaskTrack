@@ -105,8 +105,8 @@ def open_text_editor(task_title, task_id=None, day=None):
         if content and content[0]:
             text_edit.insert("1.0", content[0])
 
-# Create a task button
-def create_task_button(task_title, task_id=None, day=None):
+# Create a task button (renamed variable)
+def create_task_button_function(task_title, task_id=None, day=None):
     task_button = tk.Button(day_frames[day], text=task_title, width=20,
                             command=lambda: open_text_editor(task_title, task_id, day))
     task_button.pack(pady=5)
@@ -114,31 +114,54 @@ def create_task_button(task_title, task_id=None, day=None):
 
 # Handle task submission
 def add_task():
-    # Prompt user to select the day
-    day = day_selector.get()  # Get the selected day from the dropdown menu
-    
-    if not day:
-        messagebox.showwarning("No Day Selected", "Please select a day of the week.")
-        return
-    
-    # Ask for the task title
-    task_title = simpledialog.askstring("Create Task", f"Enter task title for {day}:")
-    if not task_title:
-        return
-    
-    # Save task to the database
-    save_task_to_db(task_title, "", day)
-    
-    # Retrieve the task ID from the database
-    cursor = db_connection.cursor()
-    cursor.execute("SELECT id FROM tasks WHERE title = ? AND day = ?", (task_title, day))
-    new_task_id = cursor.fetchone()
-    if new_task_id:
-        create_task_button(task_title, new_task_id[0], day)  # Create the button for this task
+    # Open a dialog to select the day
+    def on_day_selected():
+        selected_day = day_selector.get()
+        task_title = task_title_entry.get()
+        
+        if not task_title:
+            messagebox.showwarning("Input Error", "Please enter a task title.")
+            return
+        
+        # Save task to the database
+        save_task_to_db(task_title, "", selected_day)
+        
+        # Retrieve the task ID from the database
+        cursor = db_connection.cursor()
+        cursor.execute("SELECT id FROM tasks WHERE title = ? AND day = ?", (task_title, selected_day))
+        new_task_id = cursor.fetchone()
+        if new_task_id:
+            create_task_button_function(task_title, new_task_id[0], selected_day)  # Create the button for this task
+        
+        task_title_entry.delete(0, tk.END)  # Clear the entry box after task creation
+        messagebox.showinfo("Task Created", f"Task '{task_title}' created for {selected_day}.")
+
+    # Popup for creating a task under the same window
+    task_creation_window = tk.Toplevel(window)
+    task_creation_window.title("Create New Task")
+    task_creation_window.geometry("400x250")
+
+    # Task Title Entry
+    task_title_label = tk.Label(task_creation_window, text="Task Title:")
+    task_title_label.pack(pady=10)
+    task_title_entry = tk.Entry(task_creation_window, width=30)
+    task_title_entry.pack(pady=10)
+
+    # Day of Week Selector
+    day_label = tk.Label(task_creation_window, text="Select Day of the Week:")
+    day_label.pack(pady=10)
+    days_of_week = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+    day_selector = ttk.Combobox(task_creation_window, values=days_of_week, state="readonly", width=20)
+    day_selector.set("Sunday")  # Default to Sunday
+    day_selector.pack(pady=10)
+
+    # Button to confirm task creation
+    create_task_button = tk.Button(task_creation_window, text="Create Task", command=on_day_selected)
+    create_task_button.pack(pady=10)
 
 # Initialize the main weekly view
 def initialize_weekly_view():
-    global window, day_frames, task_buttons, day_selector
+    global window, day_frames, task_buttons
     window = tk.Tk()
     window.title("Weekly Task Manager")
     window.geometry("900x600")
@@ -173,18 +196,13 @@ def initialize_weekly_view():
         # Load existing tasks for the day
         tasks = load_tasks_for_day(day)
         for task_id, task_title in tasks:
-            create_task_button(task_title, task_id, day)
+            create_task_button_function(task_title, task_id, day)
 
-    # Create a dropdown (OptionMenu) to select the day for the task
-    day_selector = ttk.Combobox(window, values=days_of_week, state="readonly", width=20)
-    day_selector.set("Sunday")  # Default value set to Sunday
-    day_selector.grid(row=1, column=0, columnspan=7, pady=10)  # Place it at the bottom of the window
-
-    # Add Task button
+    # Create the "Create Task" button at the bottom
     add_task_button = tk.Button(window, text="Create Task", command=add_task, width=20)
-    add_task_button.grid(row=2, column=0, columnspan=7, pady=5)  # Place it below the dropdown
+    add_task_button.grid(row=1, column=0, columnspan=7, pady=10)
 
-    # Ensure columns and rows resize proportionally
+   # Ensure columns and rows resize proportionally
     for i in range(7):
         window.grid_columnconfigure(i, weight=1, uniform="equal")  # Equal weight for columns
     window.grid_rowconfigure(0, weight=1)  # Ensure row stretches to fill vertical space
