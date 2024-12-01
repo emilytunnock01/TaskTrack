@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox, simpledialog
+from tkinter import messagebox, simpledialog, ttk
 import sqlite3
 
 # Create SQLite database connection
@@ -47,6 +47,13 @@ def update_task_in_db(task_id, task_content):
     cursor.execute("UPDATE tasks SET content = ? WHERE id = ?", (task_content, task_id))
     db_connection.commit()
 
+#move task to a different day
+def change_task_day(task_id, new_day):
+    cursor = db_connection.cursor()
+    cursor.execute("UPDATE tasks SET day = ? WHERE id = ?", (new_day, task_id))
+    db_connection.commit()
+    messagebox.showinfo("Task Updated", f"Task has been moved to {new_day}.")
+
 # Load all tasks for a specific day from the database
 def load_tasks_for_day(day):
     cursor = db_connection.cursor()
@@ -91,11 +98,58 @@ def open_text_editor(task_title, task_id=None, day=None):
             messagebox.showinfo("Deleted", f"Task '{task_title}' deleted!")
             editor_window.destroy()
 
+    def edit_content(task_id, task_title, current_day):
+        # Create a new popup window
+        edit_window = tk.Toplevel()
+        edit_window.title(f"Move Task - {task_title}")
+        edit_window.geometry("300x150")
+
+        # Label for the dropdown
+        tk.Label(edit_window, text="Select new day:", font=("Helvetica", 12)).pack(pady=10)
+
+        # Dropdown for selecting the new day
+        days_of_week = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+        day_var = tk.StringVar(value=current_day)  # Pre-select current day
+        day_selector = ttk.Combobox(edit_window, textvariable=day_var, values=days_of_week, state="readonly")
+        day_selector.pack(pady=10)
+
+        # Function to move the task
+        def move_task():
+            new_day = day_var.get()
+            if new_day == current_day:
+                messagebox.showinfo("No Change", "Task is already assigned to this day.")
+                return
+
+            # Update the database
+            change_task_day(task_id, new_day)
+
+            # Update the UI
+            if task_title in task_buttons[current_day]:  # Check if the task button exists
+                task_buttons[current_day][task_title].destroy()  # Remove the button from the current day frame
+                del task_buttons[current_day][task_title]
+
+            # Recreate the button in the new day's frame
+            create_task_button(task_title, task_id, new_day)
+
+            messagebox.showinfo("Task Moved", f"Task '{task_title}' has been moved to {new_day}.")
+            edit_window.destroy()  # Close the edit window
+
+        # Submit button
+        tk.Button(edit_window, text="Move Task", command=move_task).pack(pady=10)
+        
+
+
+            
+
     button_save = tk.Button(frame, text="Save", command=save_content)
     button_save.pack(side="left", padx=5, pady=5)
 
     button_delete = tk.Button(frame, text="Delete", command=delete_content)
     button_delete.pack(side="left", padx=5, pady=5)
+
+    button_edit = tk.Button(frame, text="Edit", 
+                             command=lambda: edit_content(task_id, task_title, day))
+    button_edit.pack(side="left", padx=5, pady=5)
 
     # Pre-fill with existing content if editing
     if task_id is not None:
@@ -112,45 +166,102 @@ def create_task_button(task_title, task_id=None, day=None):
     task_button.pack(pady=5)
     task_buttons[day][task_title] = task_button  # Track the button in the global dictionary
 
-# Handle task submission
-def add_task(day):
-    task_title = simpledialog.askstring("Create Task", f"Enter task title for {day}:")
-    if not task_title:
-        return
-    save_task_to_db(task_title, "", day)
-    cursor = db_connection.cursor()
-    cursor.execute("SELECT id FROM tasks WHERE title = ?", (task_title,))
-    new_task_id = cursor.fetchone()
-    if new_task_id:
-        create_task_button(task_title, new_task_id[0], day)  # Create the button within the appropriate frame
+#form for creating task
+def add_task():
+    # Create a pop-up window
+    task_window = tk.Toplevel(window)
+    task_window.title("Create Task")
+    task_window.geometry("300x200")
+    
+    # Task Title Label and Entry
+    tk.Label(task_window, text="Task Title:").pack(pady=5)
+    task_title_entry = tk.Entry(task_window, width=25)
+    task_title_entry.pack(pady=5)
+    
+    # Day Selection Label and Combobox
+    tk.Label(task_window, text="Select Day:").pack(pady=5)
+    day_selector = ttk.Combobox(task_window, values=list(day_frames.keys()), state="readonly")
+    day_selector.pack(pady=5)
+    
+    # Function to handle task creation
+    def submit_task():
+        task_title = task_title_entry.get().strip()
+        day = day_selector.get().strip()
+        
+        if not task_title:
+            messagebox.showwarning("Missing Title", "Please enter a task title.")
+            return
+        
+        if not day:
+            messagebox.showwarning("Missing Day", "Please select a day.")
+            return
+        
+        # Save the task to the database
+        save_task_to_db(task_title, "", day)
+        
+        # Retrieve the task ID from the database
+        cursor = db_connection.cursor()
+        cursor.execute("SELECT id FROM tasks WHERE title = ? AND day = ?", (task_title, day))
+        new_task_id = cursor.fetchone()
+        
+        if new_task_id:
+            create_task_button(task_title, new_task_id[0], day)  # Create a task button in the selected day's frame
+            
+        messagebox.showinfo("Task Created", f"Task '{task_title}' added to {day}!")
+        task_window.destroy()  # Close the pop-up form
+
+    # Submit Button
+    tk.Button(task_window, text="Create Task", command=submit_task).pack(pady=15)
 
 # Initialize the main weekly view
 def initialize_weekly_view():
-    global window, day_frames, task_buttons
+    global window, day_frames, task_buttons, day_selector
     window = tk.Tk()
     window.title("Weekly Task Manager")
     window.geometry("900x600")
 
-    # Frames for each day of the week
-    days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    # Frames for each day of the week (move Sunday to the beginning)
+    days_of_week = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
     day_frames = {}
     task_buttons = {day: {} for day in days_of_week}
 
-    for day in days_of_week:
+    # Colors for each day of the week, with Sunday starting as red
+    day_colors = {
+        "Sunday": "#F94144",  # Red
+        "Monday": "#F3722C",  # Orange
+        "Tuesday": "#F8961E",  # Yellow
+        "Wednesday": "#F9C74F",  # Light Yellow
+        "Thursday": "#90BE6D",  # Green
+        "Friday": "#43AA8B",  # Teal
+        "Saturday": "#577590"  # Blue
+    }
+
+    for i, day in enumerate(days_of_week):
         frame = tk.Frame(window, borderwidth=2, relief="groove", padx=10, pady=10)
-        frame.pack(side="left", expand=True, fill="both")
+        frame.grid(row=0, column=i, sticky="nsew", padx=5, pady=5)  # Grid for proportional sizing
         day_frames[day] = frame
 
-        # Label for the day
-        tk.Label(frame, text=day, font=("Helvetica", 14, "bold")).pack()
+        # Set background color for each day
+        frame.configure(bg=day_colors[day])
 
-        # Button to add tasks
-        tk.Button(frame, text="Add Task", command=lambda d=day: add_task(d)).pack(pady=5)
+        # Label for the day
+        tk.Label(frame, text=day, font=("Helvetica", 14, "bold"), bg=day_colors[day]).pack()
 
         # Load existing tasks for the day
         tasks = load_tasks_for_day(day)
         for task_id, task_title in tasks:
             create_task_button(task_title, task_id, day)
+
+    
+
+    # Add Task button
+    add_task_button = tk.Button(window, text="Create Task", command=add_task, width=20)
+    add_task_button.grid(row=2, column=0, columnspan=7, pady=5)  # Place it below the dropdown
+
+    # Ensure columns and rows resize proportionally
+    for i in range(7):
+        window.grid_columnconfigure(i, weight=1, uniform="equal")  # Equal weight for columns
+    window.grid_rowconfigure(0, weight=1)  # Ensure row stretches to fill vertical space
 
     window.mainloop()
 
