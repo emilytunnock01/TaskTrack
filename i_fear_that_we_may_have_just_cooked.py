@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 import sqlite3
 
-##########################  UI  ###################################################################################
+##################################################  UI  ##################################################
 def center_window(window, width, height):
     # Get the screen dimensions
     screen_width = window.winfo_screenwidth()
@@ -15,7 +15,7 @@ def center_window(window, width, height):
     # Set the geometry of the window
     window.geometry(f"{width}x{height}+{x}+{y}")
 
-################################## DATABASE FUNCTIONS ###########################################################
+################################################## DATABASE FUNCTIONS ##################################################
 # Create SQLite database connection
 def initialize_database():
     conn = sqlite3.connect("tasks.db")
@@ -124,7 +124,7 @@ def refresh_weekly_view():
         for task_id, task_title in tasks:
             create_task_button(task_title, task_id, day)
 
-####################### TEXT EDITOR WINDOW #######################################################################
+################################################## TEXT EDITOR WINDOW ##################################################
 # Open text editor window for a task
 def open_text_editor(task_title, task_id=None, day=None, status="not-complete"):
     editor_window = tk.Toplevel()
@@ -182,8 +182,8 @@ def open_text_editor(task_title, task_id=None, day=None, status="not-complete"):
     # Edit task popup
     def edit_content():
         edit_window = tk.Toplevel()
-        edit_window.title(f"Edit Task - {task_title}")
-        edit_window.geometry("300x200")
+        edit_window.title(f"Editing Task Information - {task_title}")
+        center_window(edit_window, 300, 125)
 
         tk.Label(edit_window, text="Select new day:", font=("Helvetica", 12)).pack(pady=5)
 
@@ -191,10 +191,6 @@ def open_text_editor(task_title, task_id=None, day=None, status="not-complete"):
         day_var = tk.StringVar(value=day)
         day_selector = ttk.Combobox(edit_window, textvariable=day_var, values=days_of_week, state="readonly")
         day_selector.pack(pady=5)
-
-        # Checkbox to mark as completed
-        completed_var = tk.BooleanVar(value=(status == "completed"))
-        tk.Checkbutton(edit_window, text="Mark as Completed", variable=completed_var).pack(pady=5)
 
         # Save changes in edit popup
         def save_edits():
@@ -243,13 +239,19 @@ def open_text_editor(task_title, task_id=None, day=None, status="not-complete"):
         if content and content[0]:
             text_edit.insert("1.0", content[0])
 
-############################### TASK CREATION ###################################################################
+################################################## TASK CREATION ##################################################
 # Create a task button
 def create_task_button(task_title, task_id=None, day=None, status="not-completed"):
-    task_button = tk.Button(day_frames[day], text=task_title, width=20,
+    # Dynamically set width based on task title length
+    max_title_length = 30  # Maximum number of characters that will fit within the button
+    title_length = len(task_title) + 5
+    button_width = min(max_title_length, title_length) + 5  # Add extra space for padding
+
+    task_button = tk.Button(day_frames[day], text=task_title, width=button_width,
                             command=lambda: open_text_editor(task_title, task_id, day, status))
     task_button.pack(pady=5)
     task_buttons[day][task_title] = task_button  # Track the button in the global dictionary
+
 
 #form for creating task
 def add_task():
@@ -333,7 +335,7 @@ def completed_task_menu():
     task_frame.update_idletasks()
     canvas.config(scrollregion=canvas.bbox("all"))
 
-################################# MAIN MENU ##################################################################################
+################################################## MAIN MENU ##################################################
 from datetime import datetime, timedelta
 
 def initialize_weekly_view():
@@ -436,7 +438,7 @@ def initialize_weekly_view():
 
     window.mainloop()
 
-############################# START'ER UP #########################################################################3
+################################################## START'ER UP ##################################################
 # Initialize database and start program
 db_connection = initialize_database()
 initialize_weekly_view()
